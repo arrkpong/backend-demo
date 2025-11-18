@@ -1,0 +1,16 @@
+# Rust build
+/target
+**/target
+
+# Environment and secrets
+.env
+
+# IDE / tooling
+.idea/
+.vscode/
+
+# Misc
+*.log
+*.tmp
+*.swp
+*.DS_Store
