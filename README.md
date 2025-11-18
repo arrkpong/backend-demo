@@ -70,28 +70,43 @@ Shut down with `docker compose down`; the named volume `db-data` persists Postgr
 
 ```
 my_actix_app/
+├── .cargo/
+│   └── config.toml                # Cargo workspace settings (optional)
+├── .idea/
+│   └── workspace.xml              # JetBrains project metadata (ignore in CI)
+├── migration/
+│   └── *.sql                      # database schema changes
 ├── src/
-│   ├── main.rs                  # wires AppConfig, DB connection, and routes
-│   ├── config.rs                # AppConfig builder reading env vars
 │   ├── db/
-│   │   └── connection.rs         # `establish_connection`
-│   ├── models/
-│   │   └── user.rs               # SeaORM user entity
-│   ├── services/
-│   │   └── user_service.rs       # DB logic for finding/creating users
+│   │   └── connection.rs         # Postgres connection helper
 │   ├── handlers/
 │   │   ├── auth_handler.rs       # login/register/logout controllers
 │   │   └── user_handler.rs       # `/` home and `/me` profile
+│   ├── middleware/
+│   │   └── auth_middleware.rs    # JWT helper storing claims into request extensions
+│   ├── models/
+│   │   └── user.rs               # SeaORM user entity
 │   ├── routes/
 │   │   └── user_routes.rs        # central router wiring handlers
+│   ├── services/
+│   │   └── user_service.rs       # DB logic for finding/creating users
 │   ├── utils/
 │   │   ├── auth_utils.rs         # Argon2 hash/verify helpers
 │   │   └── jwt.rs                # encode/decode helpers plus claims
-│   └── middleware/
-│       └── auth_middleware.rs    # JWT helper storing claims into request extensions
+│   ├── config.rs                 # AppConfig loader
+│   ├── main.rs                   # wires AppConfig, AppState, DB connection, and routes
+│   └── state.rs                  # shared AppState (DB, config, revoked tokens)
+├── target/
+│   └── debug/                     # compiled artifacts
+├── .dockerignore                  # excludes generated files from Docker contexts
+├── .env                           # local configuration overrides loaded at runtime
+├── .env.example                   # template for required env variables
+├── .gitignore                     # files excluded from version control
+├── Cargo.lock                     # locked dependency graph for reproducible builds
 ├── Cargo.toml                    # dependency manifest
 ├── docker-compose.yml           # Postgres + backend stack
 ├── Dockerfile                   # multi-stage build for the server
+├── LICENSE
 └── README.md                     # this documentation
 ```
 

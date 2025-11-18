@@ -1,12 +1,9 @@
-use actix_web::{HttpRequest, HttpResponse, post, web};
-use sea_orm::DatabaseConnection;
+use actix_web::{HttpRequest, HttpResponse, ResponseError, post, web};
 use serde::Deserialize;
 use serde_json::json;
-use std::collections::HashSet;
-use std::sync::Mutex;
 
-use crate::config::AppConfig;
 use crate::services::user_service::{create_user, find_user_by_username};
+use crate::state::{self, AppState};
 use crate::utils::{encode_token, hash_password, verify_password};
 
 #[derive(Deserialize)]
@@ -23,16 +20,15 @@ pub struct RegisterRequest {
 
 #[post("/auth/login")]
 pub async fn login(
-    db: web::Data<DatabaseConnection>,
-    config: web::Data<AppConfig>,
+    state: web::Data<AppState>,
     login_payload: web::Json<LoginRequest>,
 ) -> HttpResponse {
-    match find_user_by_username(db.get_ref(), &login_payload.username).await {
+    match find_user_by_username(&state.db, &login_payload.username).await {
         Ok(Some(user)) => {
             if verify_password(&user.password, &login_payload.password).is_err() {
                 HttpResponse::Unauthorized().body("Invalid password.")
             } else {
-                match encode_token(&config.jwt_secret, user.id) {
+                match encode_token(&state.config.jwt_secret, user.id) {
                     Ok(token) => HttpResponse::Ok().json(json!({ "token": token })),
                     Err(e) => HttpResponse::InternalServerError()
                         .body(format!("JWT encoding failed: {}", e)),
@@ -48,11 +44,10 @@ pub async fn login(
 
 #[post("/auth/register")]
 pub async fn register(
-    db: web::Data<DatabaseConnection>,
-    config: web::Data<AppConfig>,
+    state: web::Data<AppState>,
     register_payload: web::Json<RegisterRequest>,
 ) -> HttpResponse {
-    match find_user_by_username(db.get_ref(), &register_payload.username).await {
+    match find_user_by_username(&state.db, &register_payload.username).await {
         Ok(Some(_)) => return HttpResponse::BadRequest().body("Username already exists."),
         Ok(None) => {}
         Err(e) => {
@@ -70,13 +65,13 @@ pub async fn register(
     };
 
     match create_user(
-        db.get_ref(),
+        &state.db,
         register_payload.username.clone(),
         hashed_password,
     )
     .await
     {
-        Ok(created_user) => match encode_token(&config.jwt_secret, created_user.id) {
+        Ok(created_user) => match encode_token(&state.config.jwt_secret, created_user.id) {
             Ok(token) => HttpResponse::Ok().json(json!({
                 "token": token,
                 "user": {
@@ -95,23 +90,15 @@ pub async fn register(
 }
 
 #[post("/auth/logout")]
-pub async fn logout(req: HttpRequest, revoked: web::Data<Mutex<HashSet<String>>>) -> HttpResponse {
-    let token = req
-        .headers()
-        .get("Authorization")
-        .and_then(|header| header.to_str().ok())
-        .and_then(|header| header.strip_prefix("Bearer "))
-        .map(str::trim);
+pub async fn logout(req: HttpRequest, state: web::Data<AppState>) -> HttpResponse {
+    let token = match state::bearer_token(&req) {
+        Ok(token) => token,
+        Err(err) => return err.error_response(),
+    };
 
-    match token {
-        Some(token) => {
-            let mut revoked = revoked.lock().unwrap();
-            if !revoked.insert(token.to_string()) {
-                return HttpResponse::BadRequest().body("Token already revoked");
-            }
-
-            HttpResponse::Ok().body("Logged out successfully.")
-        }
-        None => HttpResponse::BadRequest().body("Missing token in Authorization header."),
+    match state.revoke_token(&token) {
+        Ok(true) => HttpResponse::Ok().body("Logged out successfully."),
+        Ok(false) => HttpResponse::BadRequest().body("Token already revoked"),
+        Err(err) => err.error_response(),
     }
 }

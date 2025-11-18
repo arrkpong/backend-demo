@@ -1,46 +1,26 @@
-use actix_web::{HttpRequest, HttpResponse, Responder, get, web};
-use sea_orm::DatabaseConnection;
+use actix_web::{HttpRequest, HttpResponse, Responder, ResponseError, get, web};
 use serde_json::json;
-use std::collections::HashSet;
-use std::sync::Mutex;
 
-use crate::config::AppConfig;
-use crate::services::user_service::find_user_by_id;
-use crate::utils::decode_token;
-
+use crate::state::{self, AppState};
 
 #[get("/")]
 pub async fn index() -> impl Responder {
-    HttpResponse::Ok().body("Hello world!")
+    HttpResponse::Ok().body("Welcome to home page.")
 }
 
 #[get("/me")]
-pub async fn profile(
-    db: web::Data<DatabaseConnection>,
-    config: web::Data<AppConfig>,
-    revoked_tokens: web::Data<Mutex<HashSet<String>>>,
-    req: HttpRequest,
-) -> HttpResponse {
-    let token = match req
-        .headers()
-        .get("Authorization")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("Bearer ").map(str::trim))
-    {
-        Some(token) => token,
-        None => return HttpResponse::Unauthorized().body("Missing Authorization header"),
+pub async fn profile(state: web::Data<AppState>, req: HttpRequest) -> HttpResponse {
+    let token = match state::bearer_token(&req) {
+        Ok(token) => token,
+        Err(err) => return err.error_response(),
     };
 
-    if revoked_tokens.lock().unwrap().contains(token) {
-        return HttpResponse::Unauthorized().body("Token has been revoked");
-    }
-
-    let claims = match decode_token(&config.jwt_secret, token) {
+    let claims = match state.validate_token(&token) {
         Ok(claims) => claims,
-        Err(_) => return HttpResponse::Unauthorized().body("Invalid or expired token"),
+        Err(err) => return err.error_response(),
     };
 
-    match find_user_by_id(db.get_ref(), claims.sub).await {
+    match crate::services::user_service::find_user_by_id(&state.db, claims.sub).await {
         Ok(Some(user)) => HttpResponse::Ok().json(json!({
             "id": user.id,
             "username": user.username,

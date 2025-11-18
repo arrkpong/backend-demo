@@ -5,15 +5,14 @@ mod middleware;
 mod models;
 mod routes;
 mod services;
+mod state;
 mod utils;
-
-use std::collections::HashSet;
-use std::sync::Mutex;
 
 use actix_web::{App, HttpServer, web};
 use config::AppConfig;
 use db::establish_connection;
 use routes::configure as configure_routes;
+use state::AppState;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -22,15 +21,11 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Failed to connect to Postgres");
 
-    let shared_connection = web::Data::new(db_connection);
-    let shared_config = web::Data::new(app_config.clone());
-    let revoked_tokens = web::Data::new(Mutex::new(HashSet::<String>::new()));
+    let shared_state = web::Data::new(AppState::new(db_connection, app_config.clone()));
 
     HttpServer::new(move || {
         App::new()
-            .app_data(shared_connection.clone())
-            .app_data(shared_config.clone())
-            .app_data(revoked_tokens.clone())
+            .app_data(shared_state.clone())
             .configure(configure_routes)
     })
     .bind(&app_config.bind_address)?

@@ -1,24 +1,19 @@
 use actix_web::{Error, HttpMessage, dev::ServiceRequest, error::ErrorUnauthorized, web};
 
-use crate::config::AppConfig;
-use crate::utils::{TokenClaims, decode_token};
+use crate::state::{self, AppState};
+use crate::utils::TokenClaims;
 
 /// Simple middleware helper that can be used once JWT support is added.
 #[allow(dead_code)]
 pub fn ensure_auth_header(req: &ServiceRequest) -> Result<TokenClaims, Error> {
-    let token = req
-        .headers()
-        .get("Authorization")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("Bearer ").map(str::trim))
-        .ok_or_else(|| ErrorUnauthorized("Missing Authorization header"))?;
+    let token =
+        state::bearer_token(req.request()).map_err(|err| ErrorUnauthorized(err.to_string()))?;
 
-    let config = req
-        .app_data::<web::Data<AppConfig>>()
-        .ok_or_else(|| ErrorUnauthorized("Missing configuration"))?;
+    let state = req
+        .app_data::<web::Data<AppState>>()
+        .ok_or_else(|| ErrorUnauthorized("Missing application state"))?;
 
-    let claims = decode_token(&config.jwt_secret, token)
-        .map_err(|_| ErrorUnauthorized("Invalid or expired token"))?;
+    let claims = state.validate_token(&token).map_err(Error::from)?;
 
     req.extensions_mut().insert(claims.clone());
 
