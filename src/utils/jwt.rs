@@ -36,3 +36,26 @@ pub fn decode_token(secret: &str, token: &str) -> jsonwebtoken::errors::Result<T
     )
     .map(|data| data.claims)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn encode_and_decode_roundtrip() {
+        let secret = "test-secret";
+        let subject = 42;
+
+        let token = encode_token(secret, subject).expect("token should encode");
+        let claims = decode_token(secret, &token).expect("token should decode");
+
+        assert_eq!(claims.sub, subject);
+        assert!(claims.exp > Utc::now().timestamp() as usize);
+    }
+
+    #[test]
+    fn decode_fails_with_wrong_secret() {
+        let token = encode_token("one-secret", 1).expect("token should encode");
+        assert!(decode_token("different-secret", &token).is_err());
+    }
+}

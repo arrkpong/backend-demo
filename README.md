@@ -1,6 +1,6 @@
 # backend-actix-web
 
-Backend API built with `actix-web` and `SeaORM`, focused on secure credential storage, JWT authentication, and a clean modular layout.
+Backend API built with `actix-web` and `SeaORM`, focused on credential handling, JWT authentication, and a clean modular layout.
 
 ## Table of Contents
 
@@ -17,54 +17,54 @@ Backend API built with `actix-web` and `SeaORM`, focused on secure credential st
 
 ## Features
 
-- Handlers for registration, login, logout, a home index (`/`), and an authenticated profile endpoint (`/me`).
-- Secure Argon2 hashing with per-user salt stored in `utils::auth_utils`.
+- Handlers for registration, login, logout, a home index (`/`), and a secured profile endpoint (`/me`).
 - JWT encode/decode helpers that can plug into middleware (and a token blacklist for logout).
-- Clean layering: handlers call services -> services call SeaORM -> utils provide crypto helpers.
+- Credential storage currently keeps passwords as provided (no hashing helpers).
+- Clean layering: handlers call services -> services call SeaORM -> utils provide token helpers.
 
 ## Tech stack
 
-- **Web framework**: `actix-web` 4.x  
-- **ORM**: `SeaORM` with PostgreSQL  
-- **Hashing**: `argon2` + `rand_core::OsRng` for salts  
-- **Tokens**: `jsonwebtoken` with the `rust_crypto` feature  
+- **Web framework**: `actix-web` 4.x
+- **ORM**: `SeaORM` with PostgreSQL
+- **Hashing**: disabled (passwords stored as provided)
+- **Tokens**: `jsonwebtoken` with the `rust_crypto` feature
 - **Env**: `dotenvy` for reading `.env`
 
 ## Requirements
 
-- Rust (1.71+) toolchain  
-- PostgreSQL database reachable via `DATABASE_URL`  
-- `cargo` (bundled with Rust)
+- Rust (1.71+) toolchain
+- PostgreSQL database reachable via `DATABASE_URL`
+- `cargo` installed via the Rust toolchain
 
 ## Configuration
 
 Copy `.env.example` to `.env` and define:
 
-- `DATABASE_URL` – database connection string  
-- `JWT_SECRET` – secret used to sign JWTs  
-- `BIND_ADDRESS` *(optional)* – defaults to `127.0.0.1:8080`
+- `DATABASE_URL` -> database connection string
+- `JWT_SECRET` -> secret used to sign JWTs
+- `BIND_ADDRESS` *(optional)* -> defaults to `127.0.0.1:8080`
 
 ## Development setup
 
 1. Run `cargo install sqlx-cli --no-default-features --features postgres` only if you need SQLx migrations.
 2. Start the backend with `cargo run`.
-3. Consume the exposed HTTP endpoints (see below) with curl/Postman.
+3. Use curl/Postman to exercise the HTTP endpoints listed below.
 
 ## Docker
 
 1. Launch the stack with `docker compose up --build`.
-2. The Compose file brings up Postgres plus the backend; Postgres listens on `localhost:5432` and the server on `localhost:8080`.
-3. `.env` is read for `JWT_SECRET`/`BIND_ADDRESS`, while `DATABASE_URL` is overridden to point at the `db` service inside the network.
+2. Compose starts Postgres plus the API; Postgres listens on `localhost:5432` and the server on `localhost:8080`.
+3. `.env` supplies `JWT_SECRET`/`BIND_ADDRESS` while Compose overrides `DATABASE_URL` for the `db` service.
 
-Shut down with `docker compose down`; the named volume `db-data` persists Postgres data.
+Shut down with `docker compose down`; the named volume `db-data` preserves Postgres data.
 
 ## API endpoints
 
-- `GET /` – home/index welcome message.  
-- `POST /auth/register` – create a new user (returns token + filtered user data).  
-- `POST /auth/login` – authenticate and receive a JWT.  
-- `POST /auth/logout` – revoke the current bearer token (requires `Authorization: Bearer <token>`).  
-- `GET /me` – read profile info (requires valid, non-revoked bearer token).
+- `GET /` -> home/index welcome message.
+- `POST /auth/register` -> create a new user (returns token + filtered user data).
+- `POST /auth/login` -> authenticate and receive a JWT.
+- `POST /auth/logout` -> revoke the current bearer token (requires `Authorization: Bearer <token>`).
+- `GET /me` -> read profile info (requires valid, non-revoked bearer token).
 
 ## Project structure
 
@@ -116,7 +116,7 @@ my_actix_app/
 cargo test
 ```
 
-This command simply builds the binary as no dedicated unit tests exist yet.
+This command simply builds the binary since no dedicated unit tests exist yet.
 
 ## License
 

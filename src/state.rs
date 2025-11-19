@@ -92,3 +92,76 @@ pub fn bearer_token(req: &HttpRequest) -> Result<String, AuthError> {
         .map(str::to_string)
         .ok_or(AuthError::MissingHeader)
 }
+
+#[cfg(test)]
+mod tests {
+    use actix_web::test::TestRequest;
+    use sea_orm::{DatabaseBackend, MockDatabase};
+
+    use crate::utils::encode_token;
+
+    use super::*;
+
+    fn mock_state() -> AppState {
+        let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
+        let config = AppConfig {
+            database_url: "postgres://localhost:5432/postgres".to_string(),
+            bind_address: "127.0.0.1:8080".to_string(),
+            jwt_secret: "test-secret".to_string(),
+        };
+
+        AppState::new(db, config)
+    }
+
+    #[test]
+    fn validate_token_accepts_valid_token() {
+        let state = mock_state();
+        let token =
+            encode_token(&state.config.jwt_secret, 7).expect("token should encode successfully");
+
+        let claims = state
+            .validate_token(&token)
+            .expect("token should validate successfully");
+
+        assert_eq!(claims.sub, 7);
+    }
+
+    #[test]
+    fn validate_token_rejects_revoked_token() {
+        let state = mock_state();
+        let token =
+            encode_token(&state.config.jwt_secret, 5).expect("token should encode successfully");
+
+        assert!(state.revoke_token(&token).expect("lock should not fail"));
+        let result = state.validate_token(&token);
+
+        assert!(matches!(result, Err(AuthError::RevokedToken)));
+    }
+
+    #[test]
+    fn revoke_token_is_idempotent() {
+        let state = mock_state();
+        let token = "dummy-token";
+
+        assert!(state.revoke_token(token).unwrap());
+        assert!(!state.revoke_token(token).unwrap());
+    }
+
+    #[test]
+    fn bearer_token_extracts_header_value() {
+        let req = TestRequest::default()
+            .insert_header(("Authorization", "Bearer some-token"))
+            .to_http_request();
+
+        let token = bearer_token(&req).expect("token should be extracted");
+        assert_eq!(token, "some-token");
+    }
+
+    #[test]
+    fn bearer_token_errors_without_header() {
+        let req = TestRequest::default().to_http_request();
+
+        let result = bearer_token(&req);
+        assert!(matches!(result, Err(AuthError::MissingHeader)));
+    }
+}
